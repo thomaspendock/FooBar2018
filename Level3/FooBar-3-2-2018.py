@@ -1,132 +1,267 @@
 from fractions import Fraction
 
-def printMatrix(matrix):
-    for row in matrix: print(row)
+def copy(matrix):
+    '''Returns an identical copy of a matrix'''
+    i = 0
+    return [[matrix[j][i] for i in range(len(matrix))]
+                          for j in range(len(matrix[i])) ]
 
 def multiply(m1, m2):
-    # iterate through rows of X
-    for i in range(len(m1)):
-   # iterate through columns of Y
-       for j in range(len(m2[0])):
-       # iterate through rows of Y
-           for k in range(len(m2)):
-               result[i][j] += m1[i][k] * m2[k][j]
+    '''Returns matrix mulptilation of m1*m2'''
+    return [[sum(a*b for a,b in zip(m1Row,m2Col))
+             for m2Col in zip(*m2)] for m1Row in m1]
+
+def newMatrix(numRows, numCols):
+    '''Returns a size*size 0 matrix (a blank matrix)'''
+    return [[0]*numCols for i in range(numRows)]
+
+def identityMinus(m):
+    '''Returns I - m'''
+    size = len(m)
+    result = newMatrix(size, size)
+    for r in range(size):
+        for c in range(size):
+            result[r][c] = Fraction(-m[r][c].numerator, m[r][c].denominator)
+            if c == r: result[r][c] += 1
+    return result
+
+def inverse(m):
+    '''Calculates the inverse of matrix m'''
+    n = len(m)
+    table = newMatrix(n, n*2)
+
+    # Set up [A|I]
+    for r in range(n):
+        for c in range(n):
+            table[r][c] = m[r][c]
+        table[r][r+n] = 1 # add entry of I
+        
+    # pivoting
+    for r in range(n):
+
+        # divide current row by pivot value
+        scalar = table[r][r]
+        for c in range(2*n):
+            table[r][c] /= scalar
+
+        # substract the current row to all above and below rows
+        for c in range(n):
+            if c == r: continue
             
-def power(m, p):
-    product = m
-    for i in range(p-1):
-        product = multiply(product, m)
-    return product
+            scalar = table[c][r]
+            for k in range(2*n):
+                table[c][k] -= scalar * table[r][k]
 
-def dot(v1, v2):
-    return sum([v1[i]*v2[i] for i in range(len(v1))])
-
-def colVector(m, index):
-    return [m[r][index] for r in range(len(m))]
+    # extact the right half (left half is identity)
+    inv = [table[r][n:] for r in range(n)]
+    return inv
 
 
 def putOnes(m):
+    '''Add a 1 to each terminal row to represent an absorbing state'''
     new = []
     for r in range(len(m)):
         row = [x for x in m[r]]
-        if isTerminal(m, r):
+        if sum(row) == 0: #indicator of terminal row
             row[r] = 1
         new.append(row)
     return new
 
-def setFractions(m):
-    new = []
-    for r in range(len(m)):
-        d = sum(m[r])
-        new.append([ e/d for e in m[r] ])
+def swap(m, upper, lower):
+    '''Swaps two rows of an adjancency matrix'''
+    size = len(m)
+    new = newMatrix(size, size)
+    orig = [x for x in range(size)]
+    order = swapOrder(orig, upper, lower)
+    # re locate each entry according to new entry
+    for r in range(size):
+        for c in range(size):
+            new[r][c] = m[order.index(r)][order.index(c)]
     return new
 
-def isTerminal(m, index):
-    v = m[index]
-    print(v)
-    for i in range(len(v)):
-        if v[i] != 0:
-            if not (index == i and v[i] == 1):
-                return False
-    return True
+def swapOrder(order, upper, lower):
+    '''Swaps two values in list
+       order: the current ordering of states along column and row
+       upper: upper row to be swapped
+       lower: lower row to be swapped'''
+    new = [x for x in order]
+    tempUpper = new[upper]
+    tempLower = new[lower]
+    new[upper] = tempLower
+    new[lower] = tempUpper
+    return new
+    
+def shift(m):
+    '''Shifts the rows down by one of an adjancency matrix'''
+    size = len(m)
+    new = newMatrix(size, size)
+    for r in range(size):
+        row = [0 for i in range(size)]
+        for c in range(size):
+            # wrap entry to front of the row
+            if c == size-1:
+                row[0] = m[r][c]
+            # move entry to the left
+            else:
+                row[c+1] = m[r][c]
+        # wrap row to index 0 if it is at the bottom
+        if r == size-1:
+            new[0] = row
+        # move row down
+        else:
+            new[r+1] = row
+    return new
 
-def getProbs(matrix, rowNum, ref):
-    probs = []
-    for r in range(len(matrix)):
-        if isTerminal(ref, r):
-            probs.append(matrix[rowNum][r])
-    return probs
+def shiftOrder(order):
+    '''shift a given order of numbers (in a list) down by 1'''
+    new = [x for x in range(len(order))] #blank
+    for i in range(len(order)):
+        if i == len(order) -1:
+            new[0] = order[i]
+        else:
+            new[i+1] = order[i]
+    return new
 
-def hasTerminal(m):
-    for i in range(len(m)):
-        if isTerminal(m, 1): return True
-    return False
+def standardize(m):
+    '''return the standard form matrix of m:
+       |I|0|
+       |R|Q| is the standard form'''
+    n = len(m)
+    standard = copy(m)
+    ordering = [x for x in range(len(m))]
 
-def toFractions(probs):
-    fracs = []
-    for prob in probs:
-        mult = 1
-        while round(mult * prob) != round(mult * prob, 10):
-            mult += 1
-        n = mult * prob
-        d = mult
-        fracs.append([int(round(n)), int(round(d))])
-    return fracs
+    #swap terminals until all terminals are at the bottom
+    numSwaps = 0
+    for r in range(n-1, -1, -1): # start at bottom row
+        if sum(m[r]) == 0:
+            standard = swap(standard, r, n-1-numSwaps)
+            ordering = swapOrder(ordering, r, n-1-numSwaps)
+            numSwaps += 1
+            
+    # shift terminals to top
+    for r in range(n-1, -1, -1):
+        if sum(m[r]) == 0:
+            ordering = shiftOrder(ordering)
+            standard = shift(standard)
+
+    standard = putOnes(standard)
+
+    # make every number a fraction
+    for r in range(n):
+        total = sum(standard[r])
+        for c in range(n):
+            standard[r][c] = Fraction(standard[r][c], total)
+
+    return [standard, ordering]
+    
+def getFundemental(Q):
+    '''Calculates the fundemental matrix of the standard form matrix'''
+    #F = (I - Q)**-1
+    return inverse(identityMinus(Q))
+       
+def getR(m):
+    '''Returns R from the standard form matrix'''
+    n = len(m)
+    for r in range(n):
+        if m[r][r] != 1:
+            #return bottom left matrix
+            return [ x[0:r] for x in m[r:] ]
+    
+def getQ(m):
+    '''Returns Q from the standard form matrix'''
+    n = len(m)
+    for r in range(n):
+        if m[r][r] != 1:
+            #retrun bottom right matrix
+            return [ x[r:] for x in m[r:] ]
+      
+def getLimitingMatrix(m, numTerminals):
+    '''Find the limiting matrix of m'''
+    standardMatrix, ordering = standardize(m)
+    R = getR(standardMatrix)
+    Q = getQ(standardMatrix)
+    F = getFundemental(Q)
+    FR = multiply(F, R)
+
+    # construct limiting matrix by combining:
+    # | I  0 | 
+    # | FR 0 |
+    size = len(m)
+    limiting = newMatrix(size, size)
+    for i in range(numTerminals):
+        limiting[i][i] = 1
+    for i in range(numTerminals, size):
+        row = FR[i-numTerminals]
+        for x in range(len(row)):
+            limiting[i][x] = row[x]
+    
+    return limiting, ordering
+
+def getProbs(limiting, ordering, numTerminals):
+    '''Extracts the probabilites from the limiting matrix (starting at state 0)'''
+    state0index = ordering.index(0)
+    # traverse entries of the state0 row and collect probabilities
+    probs = [limiting[state0index][i] for i in range(numTerminals)]
+    normProbs = normalizeProbs(probs)
+    return normProbs
 
 def gcd(a, b):
     if b == 0: return a
     else: return gcd(b, a % b)
-
 
 def lcm(x, y):
    m = (x*y)//gcd(x,y)
    return m
 
 def lcmList(l):
+    '''least common divisor for a list of numbers'''
     if(len(l) == 1): return l[0]
     m = lcm(l[0], l[1])
+    #accumlative lcm
     for i in range(2, len(l)):
         m = lcm(m, l[i])
     return m
-def transpose(matrix):
-    i= 0
-    return [[matrix[i][j] for i in range(len(matrix))]
-                          for j in range(len(matrix[i])) ]
-def answer(m):
+
+def normalizeProbs(probs):
+    '''Find greatest common denominator and return the probs in desired format'''
+    LCM = lcmList([fraction.denominator for fraction in probs])
+    normalized = [fraction.numerator * LCM // fraction.denominator for fraction in probs]
+    normalized.append(LCM)
     
-    n = putOnes(m)
-    fracMatrix = setFractions(n)
+    return normalized
 
-    powMatrix = power(fracMatrix, 2000)
-    prob = getProbs(powMatrix, 0, m)
-    print(prob)
-    probs = toFractions(prob)
-    print(probs)
-    lcm = lcmList([x[1] for x in probs])
-    final = [ int(x[0] * lcm/x[1]) for x in probs ]
-    final.append(lcm)
-    return final
-        
-m = [[8, 1, 1],
-     [2, 7, 1],
-     [3, 1, 6]]
+def answer(m):
+    '''Find the limiting matrix of m and returns probabilties from state 0 row'''
+    if sum(m[0]) == 0: return [1, 1]
 
-m1 = [[1, 1], [4, 1]]
-m2 = [[0, 1, 0, 0, 0, 1],
-      [4, 0, 0, 3, 2, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0]]
+    numTerminals = sum([1 for row in m if sum(row) == 0])
+    limiting, ordering = getLimitingMatrix(m, numTerminals)
+    probs = getProbs(limiting, ordering, numTerminals)
+    return probs
 
+###  Test Cases ###
 
-M  = [[0, 2, 1, 0, 0],
-      [0, 0, 0, 3, 4],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0]]
-
-print(answer(m2))
+assert (
+    answer([
+        [0, 2, 1, 0, 0],
+        [0, 0, 0, 3, 4],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0]
+    ]) == [7, 6, 8, 21]
+)
+ 
+assert (
+    answer([
+        [0, 1, 0, 0, 0, 1],
+        [4, 0, 0, 3, 2, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0]
+    ]) == [0, 3, 2, 9, 14]
+)
+ 
 
 '''
 Doomsday Fuel

@@ -1,16 +1,16 @@
 from math import log
 
-def solution(n, a=0, log2=lambda x: int(log(x)/log(2))):
+def solution(n, acc=0, log2=lambda x: int(log(x)/log(2))):
     n = int(n)
-    # handle unique cases of 1, 2, and 3
-    if n < 4: return a + n - 1 
+    # 1 -> 1 (0 steps), 2 -> 1 (1 step), 3 -> 2 -> 1 (2 steps)
+    if n < 4: return acc + n - 1 
     # list of largest powers of 2 that divide n, n+1, and n-1
-    d = [n&~(n-1), (n+1)&~n, (n-1)&~(n-2)]
+    divs = [n&~(n-1), (n+1)&~n, (n-1)&~(n-2)]
     # retrieve index of largest power of 2: either 0, 1, or -1
-    i = d.index(max(d))
-    if i == 2: i = -1
+    i = divs.index(max(divs))
+    if i == 2: i = -1 # -1 is the equivlent index to 2
     # solution(shift n and divide by largest pow of 2, add steps from shifting and halving)
-    return solution((n+i)//d[i], a=a + abs(i) + log2(d[i]))
+    return solution((n+i)//divs[i], acc=acc + abs(i) + log2(divs[i]))
 
 print(solution('15'))
 print(solution('4'))
